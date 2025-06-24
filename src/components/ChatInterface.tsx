@@ -1,6 +1,8 @@
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles, Bot } from 'lucide-react';
+import { ClaudeService } from '@/services/claude';
+import { ClaudeApiKeyInput } from './ClaudeApiKeyInput';
 
 interface ChatMessage {
   id: string;
@@ -21,12 +23,14 @@ export const ChatInterface = ({ files, onUpdateFile, onCreateFile }: ChatInterfa
     {
       id: '1',
       type: 'ai',
-      content: 'Hello! I\'m your AI coding assistant. I can help you build React frontends and Python backends. What would you like to create?',
+      content: 'Hello! I\'m Claude, your AI coding assistant. I can help you build React frontends and Python backends. Set your API key above to get started!',
       timestamp: new Date()
     }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [claudeService, setClaudeService] = useState<ClaudeService | null>(null);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('claude-api-key') || '');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -37,8 +41,28 @@ export const ChatInterface = ({ files, onUpdateFile, onCreateFile }: ChatInterfa
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    if (apiKey) {
+      setClaudeService(new ClaudeService(apiKey));
+      localStorage.setItem('claude-api-key', apiKey);
+    }
+  }, [apiKey]);
+
+  const handleApiKeySet = (newApiKey: string) => {
+    setApiKey(newApiKey);
+  };
+
+  const getSystemPrompt = () => {
+    const filesList = Object.keys(files).join(', ');
+    return `You are Claude, a helpful coding assistant. You can help with React, TypeScript, Python, and web development.
+
+Current project files: ${filesList}
+
+You can suggest code changes, explain concepts, and help debug issues. When suggesting code changes, be specific about which files to modify and provide complete code examples.`;
+  };
+
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !claudeService) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -51,17 +75,36 @@ export const ChatInterface = ({ files, onUpdateFile, onCreateFile }: ChatInterfa
     setInput('');
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      const contextMessage = `Current files context:\n${Object.entries(files).map(([name, content]) => `\n--- ${name} ---\n${content.slice(0, 500)}${content.length > 500 ? '...' : ''}`).join('\n')}\n\nUser question: ${input}`;
+
+      const claudeMessages = messages.slice(-5).map(msg => ({
+        role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
+        content: msg.content
+      }));
+      claudeMessages.push({ role: 'user', content: contextMessage });
+
+      const response = await claudeService.sendMessage(claudeMessages, getSystemPrompt());
+
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: `I understand you want to "${input}". Let me help you with that! I can generate React components, Python APIs, and modify your existing code. What specific functionality would you like me to implement?`,
+        content: response,
         timestamp: new Date()
       };
       setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Claude API error:', error);
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'Sorry, I encountered an error communicating with Claude. Please check your API key and try again.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -75,10 +118,14 @@ export const ChatInterface = ({ files, onUpdateFile, onCreateFile }: ChatInterfa
     <div className="h-full flex flex-col bg-gray-900">
       {/* Header */}
       <div className="p-4 border-b border-gray-800">
-        <div className="flex items-center space-x-2">
-          <Sparkles className="w-5 h-5 text-blue-400" />
-          <h2 className="text-lg font-semibold">AI Assistant</h2>
+        <div className="flex items-center space-x-2 mb-3">
+          <Bot className="w-5 h-5 text-blue-400" />
+          <h2 className="text-lg font-semibold">Claude AI Assistant</h2>
         </div>
+        <ClaudeApiKeyInput 
+          onApiKeySet={handleApiKeySet}
+          hasApiKey={!!claudeService}
+        />
       </div>
 
       {/* Messages */}
@@ -124,13 +171,14 @@ export const ChatInterface = ({ files, onUpdateFile, onCreateFile }: ChatInterfa
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Describe what you want to build..."
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={claudeService ? "Ask Claude about your code..." : "Set your Claude API key above to start chatting"}
+            disabled={!claudeService}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-3 text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             rows={3}
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || !claudeService}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
           >
             <Send className="w-4 h-4" />
