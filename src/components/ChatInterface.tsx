@@ -1,12 +1,12 @@
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Bot } from 'lucide-react';
+import { Send, Sparkles, Bot, AlertTriangle } from 'lucide-react';
 import { ClaudeService } from '@/services/claude';
 import { ClaudeApiKeyInput } from './ClaudeApiKeyInput';
 
 interface ChatMessage {
   id: string;
-  type: 'user' | 'ai';
+  type: 'user' | 'ai' | 'error';
   content: string;
   timestamp: Date;
 }
@@ -43,12 +43,14 @@ export const ChatInterface = ({ files, onUpdateFile, onCreateFile }: ChatInterfa
 
   useEffect(() => {
     if (apiKey) {
+      console.log('Setting up Claude service with API key:', apiKey.substring(0, 20) + '...');
       setClaudeService(new ClaudeService(apiKey));
       localStorage.setItem('claude-api-key', apiKey);
     }
   }, [apiKey]);
 
   const handleApiKeySet = (newApiKey: string) => {
+    console.log('New API key set:', newApiKey.substring(0, 20) + '...');
     setApiKey(newApiKey);
   };
 
@@ -76,15 +78,19 @@ You can suggest code changes, explain concepts, and help debug issues. When sugg
     setIsLoading(true);
 
     try {
+      console.log('Preparing to send message to Claude...');
+      
       const contextMessage = `Current files context:\n${Object.entries(files).map(([name, content]) => `\n--- ${name} ---\n${content.slice(0, 500)}${content.length > 500 ? '...' : ''}`).join('\n')}\n\nUser question: ${input}`;
 
-      const claudeMessages = messages.slice(-5).map(msg => ({
+      const claudeMessages = messages.slice(-5).filter(msg => msg.type !== 'error').map(msg => ({
         role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
         content: msg.content
       }));
       claudeMessages.push({ role: 'user', content: contextMessage });
 
+      console.log('Sending message to Claude service...');
       const response = await claudeService.sendMessage(claudeMessages, getSystemPrompt());
+      console.log('Received response from Claude:', response.substring(0, 100) + '...');
 
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -94,11 +100,11 @@ You can suggest code changes, explain concepts, and help debug issues. When sugg
       };
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
-      console.error('Claude API error:', error);
+      console.error('Claude API error details:', error);
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: 'Sorry, I encountered an error communicating with Claude. Please check your API key and try again.',
+        type: 'error',
+        content: `Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -139,9 +145,17 @@ You can suggest code changes, explain concepts, and help debug issues. When sugg
               className={`max-w-[80%] rounded-lg p-3 ${
                 message.type === 'user'
                   ? 'bg-blue-600 text-white'
+                  : message.type === 'error'
+                  ? 'bg-red-900/30 border border-red-600 text-red-200'
                   : 'bg-gray-800 text-gray-100'
               }`}
             >
+              {message.type === 'error' && (
+                <div className="flex items-center space-x-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  <span className="text-sm font-medium text-red-400">API Error</span>
+                </div>
+              )}
               <p className="text-sm whitespace-pre-wrap">{message.content}</p>
               <p className="text-xs opacity-60 mt-1">
                 {message.timestamp.toLocaleTimeString()}
