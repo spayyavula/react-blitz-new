@@ -1,6 +1,8 @@
+
 import { useState, lazy, Suspense } from 'react';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { AuthGuard } from '@/components/AuthGuard';
+import { useAuth } from '@/contexts/AuthContext';
+import Landing from '@/pages/Landing';
 import { UserMenu } from '@/components/UserMenu';
 
 // Lazy load heavy components
@@ -11,6 +13,7 @@ const PreviewPane = lazy(() => import('@/components/PreviewPane').then(module =>
 const FileExplorer = lazy(() => import('@/components/FileExplorer').then(module => ({ default: module.FileExplorer })));
 
 const Index = () => {
+  const { user, loading } = useAuth();
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [files, setFiles] = useState<Record<string, string>>({
     'App.tsx': `import React from 'react';
@@ -73,71 +76,79 @@ async def health_check():
     }
   };
 
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  // Show landing page if user is not authenticated
+  if (!user) {
+    return <Landing />;
+  }
+
+  // Show dashboard if user is authenticated
   return (
-    <AuthGuard>
-      <div className="h-screen bg-gray-900 text-white flex">
-        {/* Sidebar */}
-        <Suspense fallback={<div className="w-16 bg-gray-950 border-r border-gray-800" />}>
-          <Sidebar />
-        </Suspense>
+    <div className="h-screen bg-gray-900 text-white flex">
+      {/* Sidebar */}
+      <Suspense fallback={<div className="w-16 bg-gray-950 border-r border-gray-800" />}>
+        <Sidebar />
+      </Suspense>
+      
+      {/* Main Content */}
+      <div className="flex-1 flex">
+        {/* Left Panel - Chat */}
+        <div className="w-1/3 border-r border-gray-800">
+          {/* User Menu */}
+          <div className="p-4 border-b border-gray-800 flex justify-end">
+            <UserMenu />
+          </div>
+          <Suspense fallback={<LoadingSpinner />}>
+            <ChatInterface 
+              files={files}
+              onUpdateFile={updateFile}
+              onCreateFile={createFile}
+              onDeleteFile={deleteFile}
+            />
+          </Suspense>
+        </div>
         
-        {/* Main Content */}
-        <div className="flex-1 flex">
-          {/* Left Panel - Chat */}
-          <div className="w-1/3 border-r border-gray-800">
-            {/* User Menu */}
-            <div className="p-4 border-b border-gray-800 flex justify-end">
-              <UserMenu />
-            </div>
-            <Suspense fallback={<LoadingSpinner />}>
-              <ChatInterface 
+        {/* Right Panel - Code & Preview */}
+        <div className="flex-1 flex flex-col">
+          {/* File Explorer */}
+          <div className="h-48 border-b border-gray-800">
+            <Suspense fallback={<div className="h-full bg-gray-800" />}>
+              <FileExplorer
                 files={files}
-                onUpdateFile={updateFile}
+                selectedFile={selectedFile}
+                onSelectFile={setSelectedFile}
                 onCreateFile={createFile}
                 onDeleteFile={deleteFile}
               />
             </Suspense>
           </div>
           
-          {/* Right Panel - Code & Preview */}
-          <div className="flex-1 flex flex-col">
-            {/* File Explorer */}
-            <div className="h-48 border-b border-gray-800">
+          {/* Editor and Preview */}
+          <div className="flex-1 flex">
+            {/* Code Editor */}
+            <div className="w-1/2 border-r border-gray-800">
               <Suspense fallback={<div className="h-full bg-gray-800" />}>
-                <FileExplorer
-                  files={files}
-                  selectedFile={selectedFile}
-                  onSelectFile={setSelectedFile}
-                  onCreateFile={createFile}
-                  onDeleteFile={deleteFile}
+                <CodeEditor
+                  file={selectedFile}
+                  content={selectedFile ? files[selectedFile] : ''}
+                  onContentChange={(content) => selectedFile && updateFile(selectedFile, content)}
                 />
               </Suspense>
             </div>
             
-            {/* Editor and Preview */}
-            <div className="flex-1 flex">
-              {/* Code Editor */}
-              <div className="w-1/2 border-r border-gray-800">
-                <Suspense fallback={<div className="h-full bg-gray-800" />}>
-                  <CodeEditor
-                    file={selectedFile}
-                    content={selectedFile ? files[selectedFile] : ''}
-                    onContentChange={(content) => selectedFile && updateFile(selectedFile, content)}
-                  />
-                </Suspense>
-              </div>
-              
-              {/* Preview */}
-              <div className="w-1/2">
-                <Suspense fallback={<div className="h-full bg-gray-800" />}>
-                  <PreviewPane files={files} />
-                </Suspense>
-              </div>
+            {/* Preview */}
+            <div className="w-1/2">
+              <Suspense fallback={<div className="h-full bg-gray-800" />}>
+                <PreviewPane files={files} />
+              </Suspense>
             </div>
           </div>
         </div>
       </div>
-    </AuthGuard>
+    </div>
   );
 };
 
