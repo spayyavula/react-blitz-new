@@ -1,10 +1,13 @@
 
-import { useState } from 'react';
-import { Sidebar } from '@/components/Sidebar';
-import { ChatInterface } from '@/components/ChatInterface';
-import { CodeEditor } from '@/components/CodeEditor';
-import { PreviewPane } from '@/components/PreviewPane';
-import { FileExplorer } from '@/components/FileExplorer';
+import { useState, lazy, Suspense } from 'react';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+
+// Lazy load heavy components
+const Sidebar = lazy(() => import('@/components/Sidebar').then(module => ({ default: module.Sidebar })));
+const ChatInterface = lazy(() => import('@/components/ChatInterface').then(module => ({ default: module.ChatInterface })));
+const CodeEditor = lazy(() => import('@/components/CodeEditor').then(module => ({ default: module.CodeEditor })));
+const PreviewPane = lazy(() => import('@/components/PreviewPane').then(module => ({ default: module.PreviewPane })));
+const FileExplorer = lazy(() => import('@/components/FileExplorer').then(module => ({ default: module.FileExplorer })));
 
 const Index = () => {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -72,47 +75,57 @@ async def health_check():
   return (
     <div className="h-screen bg-gray-900 text-white flex">
       {/* Sidebar */}
-      <Sidebar />
+      <Suspense fallback={<div className="w-16 bg-gray-950 border-r border-gray-800" />}>
+        <Sidebar />
+      </Suspense>
       
       {/* Main Content */}
       <div className="flex-1 flex">
         {/* Left Panel - Chat */}
         <div className="w-1/3 border-r border-gray-800">
-          <ChatInterface 
-            files={files}
-            onUpdateFile={updateFile}
-            onCreateFile={createFile}
-            onDeleteFile={deleteFile}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <ChatInterface 
+              files={files}
+              onUpdateFile={updateFile}
+              onCreateFile={createFile}
+              onDeleteFile={deleteFile}
+            />
+          </Suspense>
         </div>
         
         {/* Right Panel - Code & Preview */}
         <div className="flex-1 flex flex-col">
           {/* File Explorer */}
           <div className="h-48 border-b border-gray-800">
-            <FileExplorer
-              files={files}
-              selectedFile={selectedFile}
-              onSelectFile={setSelectedFile}
-              onCreateFile={createFile}
-              onDeleteFile={deleteFile}
-            />
+            <Suspense fallback={<div className="h-full bg-gray-800" />}>
+              <FileExplorer
+                files={files}
+                selectedFile={selectedFile}
+                onSelectFile={setSelectedFile}
+                onCreateFile={createFile}
+                onDeleteFile={deleteFile}
+              />
+            </Suspense>
           </div>
           
           {/* Editor and Preview */}
           <div className="flex-1 flex">
             {/* Code Editor */}
             <div className="w-1/2 border-r border-gray-800">
-              <CodeEditor
-                file={selectedFile}
-                content={selectedFile ? files[selectedFile] : ''}
-                onContentChange={(content) => selectedFile && updateFile(selectedFile, content)}
-              />
+              <Suspense fallback={<div className="h-full bg-gray-800" />}>
+                <CodeEditor
+                  file={selectedFile}
+                  content={selectedFile ? files[selectedFile] : ''}
+                  onContentChange={(content) => selectedFile && updateFile(selectedFile, content)}
+                />
+              </Suspense>
             </div>
             
             {/* Preview */}
             <div className="w-1/2">
-              <PreviewPane files={files} />
+              <Suspense fallback={<div className="h-full bg-gray-800" />}>
+                <PreviewPane files={files} />
+              </Suspense>
             </div>
           </div>
         </div>
