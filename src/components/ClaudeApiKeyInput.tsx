@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { Key, Eye, EyeOff } from 'lucide-react';
+import { Key, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 interface ClaudeApiKeyInputProps {
   onApiKeySet: (apiKey: string) => void;
@@ -11,13 +11,36 @@ export const ClaudeApiKeyInput = ({ onApiKeySet, hasApiKey }: ClaudeApiKeyInputP
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isExpanded, setIsExpanded] = useState(!hasApiKey);
+  const [error, setError] = useState('');
+
+  const validateApiKey = (key: string) => {
+    if (!key.trim()) {
+      return 'API key is required';
+    }
+    if (!key.startsWith('sk-ant-api')) {
+      return 'Claude API key must start with "sk-ant-api"';
+    }
+    if (key.length < 20) {
+      return 'API key appears to be too short';
+    }
+    return '';
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (apiKey.trim()) {
-      onApiKeySet(apiKey.trim());
-      setIsExpanded(false);
+    setError('');
+    
+    const trimmedKey = apiKey.trim();
+    const validationError = validateApiKey(trimmedKey);
+    
+    if (validationError) {
+      setError(validationError);
+      return;
     }
+
+    onApiKeySet(trimmedKey);
+    setIsExpanded(false);
+    setError('');
   };
 
   if (hasApiKey && !isExpanded) {
@@ -51,9 +74,14 @@ export const ClaudeApiKeyInput = ({ onApiKeySet, hasApiKey }: ClaudeApiKeyInputP
           <input
             type={showKey ? 'text' : 'password'}
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-api..."
-            className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+            onChange={(e) => {
+              setApiKey(e.target.value);
+              setError('');
+            }}
+            placeholder="sk-ant-api03_..."
+            className={`w-full bg-gray-900 border rounded px-3 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 pr-10 ${
+              error ? 'border-red-500 focus:ring-red-500' : 'border-gray-600 focus:ring-blue-500'
+            }`}
           />
           <button
             type="button"
@@ -62,6 +90,18 @@ export const ClaudeApiKeyInput = ({ onApiKeySet, hasApiKey }: ClaudeApiKeyInputP
           >
             {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
+        </div>
+
+        {error && (
+          <div className="flex items-center space-x-2 text-red-400 text-xs">
+            <AlertCircle className="w-3 h-3" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="text-xs text-gray-400 space-y-1">
+          <p>• API key should start with "sk-ant-api"</p>
+          <p>• Get your key from the Anthropic Console</p>
         </div>
 
         <div className="flex justify-between items-center">
